@@ -124,22 +124,103 @@ class KalaamSpider(scrapy.Spider):
         # YouTube (first match)
         yt_link = response.css('a[href*="youtu"]::attr(href)').get()
 
-        # lyrics: take ONLY the toggled content areas
         # English block is #etext, Urdu block is #utext on the site
-        lyrics_eng = clean_join(
-            response.css("#etext .text-content *::text, #etext::text").getall()
+        raw_nodes = response.css("#etext").xpath("./node()").getall()
+        html_eng = "".join(raw_nodes)
+        html_eng = (
+            html_eng.replace("<br>", "\n")
+            .replace("<br/>", "\n")
+            .replace("\t\n", "")
+            .replace("\r\n", "\n")
         )
-        lyrics_urdu = clean_join(
-            response.css("#utext .text-content *::text, #utext::text").getall()
+        # lyrics_eng = html_eng.strip()
+        lyrics_eng = html_eng
+
+        raw_nodes = response.css("#utext").xpath("./node()").getall()
+        html_urdu = "".join(raw_nodes)
+        html_urdu = (
+            html_urdu.replace("<br>", "\n")
+            .replace("<br/>", "\n")
+            .replace("\t", "")
+            .replace("\r\n", "\n")
+            .replace("\n\n\n", "\n\r\n")
+            .replace("\n\n", "\n")
+            .replace("\n\r\n", "\n\n")
         )
 
+        # lyrics_urdu = html_urdu.strip()
+        lyrics_urdu = html_urdu
+
         # In case the site sometimes omits the wrapper, try a gentle fallback:
-        if not lyrics_eng:
-            lyrics_eng = clean_join(response.xpath('//*[@id="etext"]//text()').getall())
-        if not lyrics_urdu:
-            lyrics_urdu = clean_join(
-                response.xpath('//*[@id="utext"]//text()').getall()
-            )
+        # if not lyrics_eng:
+        #     lyrics_eng = clean_join(response.xpath('//*[@id="etext"]//text()').getall())
+        # if not lyrics_urdu:
+        #     lyrics_urdu = clean_join(
+        #         response.xpath('//*[@id="utext"]//text()').getall()
+        #     )
+
+        # Normalization of Roman urdu searching
+
+        import re
+        from typing import Iterable
+
+        _VOWELS = "aeiou"
+
+        WORD_EQUIV = {
+            r"\b(main|mein|mei|mn)\b": "mai",
+            r"\b(nahin|nahi|nahee|nai)\b": "nahi",
+            r"\b(hain+)\b": "hain",
+            r"\b(kya|kia|ky[aa])\b": "kya",
+            r"\b(mera+a*h*)\b": "mera",
+        }
+
+        SEQRULES: Iterable[tuple[re.Pattern, str]] = [
+            # punctuation/spacing
+            (re.compile(r"[^\w\s]"), " "),
+            (re.compile(r"\s+"), " "),
+            # digraphs/phones
+            (re.compile(r"kh"), "x"),
+            (re.compile(r"gh"), "g"),
+            (re.compile(r"sh"), "sh"),
+            (re.compile(r"ch"), "ch"),
+            (re.compile(r"zh"), "z"),
+            (re.compile(r"ph"), "f"),
+            (re.compile(r"th"), "t"),
+            (re.compile(r"dh"), "d"),
+            (re.compile(r"bh"), "b"),
+            (re.compile(r"q"), "k"),
+            # c→k before a/o/u; c→s before e/i/y else keep c
+            (re.compile(r"c(?=[aou])"), "k"),
+            (re.compile(r"c(?=[ei y])"), "s"),
+            # long vowels
+            (re.compile(r"aa+"), "a"),
+            (re.compile(r"(ee+|ii+)"), "i"),
+            (re.compile(r"oo+"), "u"),
+            # ai/ei/ay family → ai
+            (re.compile(r"(ei|ay)"), "ai"),
+            # terminal h after a vowel → drop
+            (re.compile(rf"([{_VOWELS}])h\b"), r"\1"),
+            # collapse triple+ repeats
+            (re.compile(rf"([{_VOWELS}])\1{{2,}}"), r"\1\1"),  # vowels to max 2
+            (re.compile(rf"([^ {_VOWELS}\W])\1{{1,}}"), r"\1"),  # consonants to 1
+            # e/i and o/u collapse (after ai handling)
+            (re.compile(r"e"), "i"),
+            (re.compile(r"o"), "u"),
+            # spaces again
+            (re.compile(r"\s+"), " "),
+        ]
+
+        def normalize_roman_urdu(text: str) -> str:
+            s = text.lower().strip()
+            # word-level canonical replacements
+            for pat, repl in WORD_EQUIV.items():
+                s = re.sub(pat, repl, s)
+            # sequence rules
+            for pat, repl in SEQRULES:
+                s = pat.sub(repl, s)
+            return s.strip()
+
+        # Finish Normalization
 
         yield NohayonlineScraperItem(
             id=kid,
@@ -151,4 +232,5 @@ class KalaamSpider(scrapy.Spider):
             lyrics_urdu=lyrics_urdu,
             yt_link=yt_link,
             source_url=response.url,
+            title_normalized=normalize_roman_urdu(title),
         )

@@ -17,10 +17,13 @@ class NohayonlineScraperPipeline:
         if not dsn:
             host = os.getenv("POSTGRES_HOST", s.get("POSTGRES_HOST", "127.0.0.1"))
             port = int(os.getenv("POSTGRES_PORT", s.get("POSTGRES_PORT", 5432)))
-            db = os.getenv("POSTGRES_DB", s.get("POSTGRES_DB", "yourdb"))
-            user = os.getenv("POSTGRES_USER", s.get("POSTGRES_USER", "youruser"))
-            pwd = os.getenv("POSTGRES_PASS", s.get("POSTGRES_PASS", "yourpass"))
+            db = os.getenv("POSTGRES_DB", s.get("POSTGRES_DB", "postgres"))
+            user = os.getenv("POSTGRES_USER", s.get("POSTGRES_USER", "postgres"))
+            pwd = os.getenv(
+                "POSTGRES_PASS", s.get("POSTGRES_PASS", "yoursecretpassword")
+            )
             dsn = f"host={host} port={port} dbname={db} user={user} password={pwd}"
+            print(dsn)
 
         self.conn = psycopg2.connect(dsn)
         self.conn.set_session(autocommit=False)

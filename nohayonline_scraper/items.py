@@ -16,3 +16,4 @@ class NohayonlineScraperItem(scrapy.Item):
     lyrics_eng = scrapy.Field()
     yt_link = scrapy.Field()
     source_url = scrapy.Field()
+    title_normalized = scrapy.Field()
